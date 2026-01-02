@@ -11,11 +11,16 @@ import {
 
 import { seedActivities } from "@/app/src/seed/seed";
 import type { TaskCard } from "@/app/src/types";
-import DraggableFlatList, { RenderItemParams } from "react-native-draggable-flatlist";
+import DraggableFlatList, {
+  RenderItemParams,
+} from "react-native-draggable-flatlist";
 
-//Local types=
+//Local types
 type Activity = { id: string; name: string; colorHex: string; sortOrder: number };
 type Cell = { activityId: string | null };
+type DragMode = "PAINT" | "ERASE";
+
+const SLOT_ROW_H = 20;
 
 //Time utils
 function timeToMinutes(t: string) {
@@ -33,7 +38,7 @@ function slotLabel(startMin: number, idx: number) {
 }
 
 export default function Index() {
-  //Data=
+  //Data
   const activities = seedActivities;
 
   //Settings(TODO: load from Settings screen)
@@ -45,11 +50,16 @@ export default function Index() {
   const totalSlots = Math.max(0, Math.floor((endMin - startMin) / 30));
 
   //State
-  const [selectedActivityId, setSelectedActivityId] = useState<string>(activities[0]?.id ?? "");
-  const [skipMode, setSkipMode] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<string>(
+    activities[0]?.id ?? ""
+  );
 
-  //Refs for focusing next TextInput
-  const inputRefs = useRef<Record<string, TextInput | null>>({});
+  //One-body toggle: PAINT<->ERASE
+  const [mode, setMode] = useState<DragMode>("PAINT");
+  const isErase = mode === "ERASE";
+
+  //Day-level skip lock(excluded from stats)
+  const [daySkipped, setDaySkipped] = useState(false);
 
   const [cells, setCells] = useState<Cell[]>(
     () => Array.from({ length: totalSlots }, () => ({ activityId: null }))
@@ -63,6 +73,31 @@ export default function Index() {
     },
   ]);
 
+  //Undo(1 step) - STATE for reliable rerender
+  const undoRef = useRef<Cell[] | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const saveUndoSnapshot = (snapshot: Cell[]) => {
+    undoRef.current = snapshot;
+    setCanUndo(true);
+  };
+
+  const doUndo = () => {
+    const snap = undoRef.current;
+    if (!snap) return;
+    setCells(snap);
+    undoRef.current = null;
+    setCanUndo(false);
+  };
+
+  //Refs for timeline drag
+  const paintingRef = useRef(false);
+  const startIdxRef = useRef<number | null>(null);
+  const baseCellsRef = useRef<Cell[] | null>(null);
+
+  //Refs for focusing next TextInput
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+
   //Derived
   const activityById = useMemo(() => {
     const m = new Map<string, Activity>();
@@ -70,7 +105,7 @@ export default function Index() {
     return m;
   }, [activities]);
 
-  //Handlers-Cards/Checklist
+  //Cards/Checklist handlers
   const addTaskCard = () => {
     setCards((prev) => [
       ...prev,
@@ -84,7 +119,6 @@ export default function Index() {
 
   const removeTaskCard = (cardId: string) => {
     setCards((prev) => {
-      //Keep at least 1 card
       if (prev.length <= 1) return prev;
       return prev.filter((c) => c.id !== cardId);
     });
@@ -114,7 +148,9 @@ export default function Index() {
   const updateItemText = (cardId: string, itemId: string, text: string) => {
     setCards((prev) =>
       prev.map((c) =>
-        c.id === cardId ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, text } : i)) } : c
+        c.id === cardId
+          ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, text } : i)) }
+          : c
       )
     );
   };
@@ -125,7 +161,6 @@ export default function Index() {
     setCards((prev) =>
       prev.map((card) => {
         if (card.id !== cardId) return card;
-
         const idx = card.items.findIndex((i) => i.id === itemId);
         if (idx === -1) return card;
 
@@ -143,9 +178,7 @@ export default function Index() {
       prev.map((c) => {
         if (c.id !== cardId) return c;
 
-        //Keep at least 1 row
         if (c.items.length <= 1) return c;
-
         const items = c.items.filter((i) => i.id !== itemId);
         return {
           ...c,
@@ -155,17 +188,25 @@ export default function Index() {
     );
   };
 
-  //Handlers-Timeline
+  //Timeline handlers
   const onPressSlot = (idx: number) => {
-    if (skipMode) return;
+    //Skip lock: block all interactions
+    if (daySkipped) return;
 
     setCells((prev) => {
+      saveUndoSnapshot(prev);
+
       const next = [...prev];
       const cur = next[idx];
 
+      if (isErase) {
+        next[idx] = { activityId: null };
+        return next;
+      }
+
       if (!selectedActivityId) return prev;
 
-      //Toggle fill/clear
+      //Paint mode: tap again on same activity=>erase(toggle)
       next[idx] = {
         activityId: cur.activityId === selectedActivityId ? null : selectedActivityId,
       };
@@ -173,7 +214,36 @@ export default function Index() {
     });
   };
 
+  const yToIdx = (y: number) => {
+    const idx = Math.floor(y / SLOT_ROW_H);
+    if (idx < 0) return 0;
+    if (idx >= totalSlots) return totalSlots - 1;
+    return idx;
+  };
+
+  const applyContiguousFromStart = (currentIdx: number) => {
+    const start = startIdxRef.current;
+    const base = baseCellsRef.current;
+    if (start == null || !base) return;
+
+    const a = Math.min(start, currentIdx);
+    const b = Math.max(start, currentIdx);
+
+    const next = base.slice();
+
+    for (let i = a; i <= b; i++) {
+      if (isErase) {
+        next[i] = { activityId: null };
+      } else {
+        if (!selectedActivityId) continue;
+        next[i] = { activityId: selectedActivityId };
+      }
+    }
+    setCells(next);
+  };
+
   const clearTimeline = () => {
+    if (!daySkipped) saveUndoSnapshot(cells);
     setCells(() => Array.from({ length: totalSlots }, () => ({ activityId: null })));
   };
 
@@ -182,30 +252,24 @@ export default function Index() {
     const cell = cells[idx];
     const activity = cell.activityId ? activityById.get(cell.activityId) : undefined;
 
-    const bg = skipMode ? "#E5E7EB" : activity?.colorHex ?? "#EEF2F7";
+    const bg = activity?.colorHex ?? "#EEF2F7";
     const label = idx % 2 === 0 ? slotLabel(startMin, idx) : "";
 
     return (
-      <Pressable
-        onPress={() => onPressSlot(idx)}
-        disabled={skipMode}
-        style={[styles.slotRow, skipMode && { opacity: 0.6 }]}
-      >
+      <Pressable onPress={() => onPressSlot(idx)} style={styles.slotRow}>
         <Text style={styles.timeText}>{label}</Text>
         <View style={[styles.slotBar, { backgroundColor: bg }]} />
       </Pressable>
     );
   };
 
-  //UI
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.twoCol}>
-        {/* LEFT: Cards + Paint */}
+        {/* LEFT: Cards+Paint */}
         <View style={styles.leftPane}>
           {cards.map((card, index) => (
             <View key={card.id} style={styles.card}>
-              {/* Card header */}
               <View style={styles.cardHeader}>
                 <TextInput
                   value={card.title}
@@ -215,13 +279,16 @@ export default function Index() {
                   placeholderTextColor="#9CA3AF"
                 />
 
-                {/* First card: add card, others: delete card */}
                 {index === 0 ? (
                   <Pressable style={styles.iconBtn} onPress={addTaskCard} hitSlop={10}>
                     <Text style={styles.iconPlus}>＋</Text>
                   </Pressable>
                 ) : (
-                  <Pressable style={styles.iconBtn} onPress={() => confirmRemoveCard(card.id)} hitSlop={10}>
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => confirmRemoveCard(card.id)}
+                    hitSlop={10}
+                  >
                     <Text style={styles.iconX}>✕</Text>
                   </Pressable>
                 )}
@@ -229,7 +296,6 @@ export default function Index() {
 
               <View style={styles.underline} />
 
-              {/* Reorderable checklist */}
               <DraggableFlatList
                 data={card.items}
                 keyExtractor={(item) => item.id}
@@ -239,9 +305,12 @@ export default function Index() {
                     prev.map((c) => (c.id === card.id ? { ...c, items: data } : c))
                   );
                 }}
-                renderItem={({ item, drag, isActive }: RenderItemParams<(typeof card.items)[number]>) => (
+                renderItem={({
+                  item,
+                  drag,
+                  isActive,
+                }: RenderItemParams<(typeof card.items)[number]>) => (
                   <View style={[styles.taskRow, isActive && { opacity: 0.7 }]}>
-                    {/* Checkbox: tap = toggle, long press = drag */}
                     <Pressable
                       onPress={() => toggleItemDone(card.id, item.id)}
                       onLongPress={drag}
@@ -262,14 +331,16 @@ export default function Index() {
                       onSubmitEditing={() => {
                         if (!item.text.trim()) return;
                         const newId = addItemAfter(card.id, item.id);
-                        requestAnimationFrame(() => {
-                          inputRefs.current[newId]?.focus();
-                        });
+                        requestAnimationFrame(() => inputRefs.current[newId]?.focus());
                       }}
                       style={[styles.taskInput, item.done && styles.taskDoneText]}
                     />
 
-                    <Pressable onPress={() => removeTaskItem(card.id, item.id)} style={styles.deleteBtn} hitSlop={10}>
+                    <Pressable
+                      onPress={() => removeTaskItem(card.id, item.id)}
+                      style={styles.deleteBtn}
+                      hitSlop={10}
+                    >
                       <Text style={styles.deleteBtnText}>✕</Text>
                     </Pressable>
                   </View>
@@ -278,25 +349,56 @@ export default function Index() {
             </View>
           ))}
 
-          {/* Paint */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Paint</Text>
+            <View style={styles.paintHeader}>
+              <Text style={styles.cardTitle}>Paint</Text>
 
+              <Pressable
+                onPress={() => setDaySkipped((v) => !v)}
+                style={[styles.skipPill, daySkipped && styles.skipPillActive]}
+              >
+                <Text style={[styles.skipText, daySkipped && styles.skipTextActive]}>
+                  Skip
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Actions */}
             <View style={styles.paintActions}>
               <Pressable
-                onPress={() => setSkipMode((v) => !v)}
-                style={[styles.pill, { backgroundColor: skipMode ? "#111" : "#EEE" }]}
+                disabled={daySkipped}
+                onPress={() => setMode((m) => (m === "PAINT" ? "ERASE" : "PAINT"))}
+                style={[
+                  styles.pill,
+                  { backgroundColor: "#111", opacity: daySkipped ? 0.4 : 1 },
+                ]}
               >
-                <Text style={{ color: skipMode ? "#FFF" : "#111", fontWeight: "600" }}>
-                  {skipMode ? "Skip" : "Record"}
+                <Text style={{ color: "#FFF", fontWeight: "700" }}>
+                  {mode === "PAINT" ? "Record" : "Erase"}
                 </Text>
               </Pressable>
 
-              <Pressable onPress={clearTimeline} style={styles.clearPill}>
+              <Pressable
+                onPress={doUndo}
+                disabled={!canUndo || daySkipped}
+                style={[
+                  styles.clearPill,
+                  { opacity: !canUndo || daySkipped ? 0.4 : 1 },
+                ]}
+              >
+                <Text style={styles.clearText}>Undo</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={clearTimeline}
+                disabled={daySkipped}
+                style={[styles.clearPill, { opacity: daySkipped ? 0.4 : 1 }]}
+              >
                 <Text style={styles.clearText}>Clear</Text>
               </Pressable>
             </View>
 
+            {/* Palette */}
             <FlatList
               data={activities}
               horizontal
@@ -306,14 +408,14 @@ export default function Index() {
                 const selected = item.id === selectedActivityId;
                 return (
                   <Pressable
-                    disabled={skipMode}
+                    disabled={daySkipped}
                     onPress={() => setSelectedActivityId(item.id)}
                     style={[
                       styles.paletteItem,
                       {
                         borderColor: selected ? "#111" : "transparent",
                         backgroundColor: item.colorHex,
-                        opacity: skipMode ? 0.5 : 1,
+                        opacity: daySkipped ? 0.4 : 1,
                       },
                     ]}
                   >
@@ -327,24 +429,61 @@ export default function Index() {
 
         {/* RIGHT: Timeline */}
         <View style={styles.rightPane}>
-          {skipMode && (
-            <View style={styles.skipOverlay}>
-              <Text style={styles.skipText}>Skipped time range</Text>
-            </View>
-          )}
-
           <View style={styles.rightHeader}>
             <Text style={styles.rightTitle}>
               {startTime} → {endTime}
             </Text>
           </View>
 
-          <FlatList
-            data={Array.from({ length: totalSlots }, (_, i) => i)}
-            keyExtractor={(i) => String(i)}
-            renderItem={renderSlot}
-            contentContainerStyle={styles.timeline}
-          />
+          <View style={{ flex: 1 }}>
+            <FlatList
+              data={Array.from({ length: totalSlots }, (_, i) => i)}
+              keyExtractor={(i) => String(i)}
+              renderItem={renderSlot}
+              contentContainerStyle={styles.timeline}
+            />
+
+            <View
+              style={styles.paintOverlay}
+              pointerEvents={daySkipped ? "none" : "box-only"}
+              onStartShouldSetResponder={() => !daySkipped}
+              onMoveShouldSetResponder={() => !daySkipped}
+              onResponderGrant={(e) => {
+                if (daySkipped) return;
+
+                paintingRef.current = true;
+
+                const idx = yToIdx(e.nativeEvent.locationY);
+                startIdxRef.current = idx;
+                baseCellsRef.current = cells;
+
+                saveUndoSnapshot(cells);
+                applyContiguousFromStart(idx);
+              }}
+              onResponderMove={(e) => {
+                if (daySkipped) return;
+                if (!paintingRef.current) return;
+                const idx = yToIdx(e.nativeEvent.locationY);
+                applyContiguousFromStart(idx);
+              }}
+              onResponderRelease={() => {
+                paintingRef.current = false;
+                startIdxRef.current = null;
+                baseCellsRef.current = null;
+              }}
+              onResponderTerminate={() => {
+                paintingRef.current = false;
+                startIdxRef.current = null;
+                baseCellsRef.current = null;
+              }}
+            />
+
+            {daySkipped && (
+              <View style={styles.skipLockOverlay} pointerEvents="auto">
+                <Text style={styles.skipLockText}>Skipped (excluded from stats)</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -374,7 +513,33 @@ const styles = {
     marginBottom: 6,
   },
 
+  paintHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
   cardTitle: { fontSize: 14, fontWeight: "800", marginBottom: 8 },
+  skipPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  skipPillActive: {
+    backgroundColor: "#111",
+    borderColor: "#111",
+  },
+  skipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#111",
+  },
+  skipTextActive: {
+    color: "#FFF",
+  },
 
   cardTitleInput: {
     flex: 1,
@@ -429,25 +594,34 @@ const styles = {
   rightTitle: { fontWeight: "600", fontSize: 10 },
   timeline: { paddingBottom: 20 },
 
-  slotRow: { flexDirection: "row", alignItems: "center", paddingVertical: 3 },
+  slotRow: { height: SLOT_ROW_H, flexDirection: "row", alignItems: "center" },
   timeText: { width: 54, fontSize: 11, opacity: 0.55 },
   slotBar: { flex: 1, height: 16, borderRadius: 6 },
 
-  skipOverlay: {
+  paintOverlay: {
     position: "absolute",
-    top: 60,
+    top: 0,
     left: 0,
     right: 0,
-    alignItems: "center",
-    zIndex: 10,
+    bottom: 0,
   },
-  skipText: {
+
+  skipLockOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(229,231,235,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 50,
+  },
+  skipLockText: {
     color: "#111",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "800",
+    textAlign: "center",
   },
 
   taskRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },

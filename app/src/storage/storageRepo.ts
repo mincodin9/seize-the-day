@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createEmptyDayRecord, seedActivities, seedGoals } from "../seed/seed";
-import type { Activity, DayRecord, Goal } from "../types";
+import type { Activity, DailyRecord, Goal } from "../types";
 
 const KEY_ACTIVITIES = "@std/activities";
 const KEY_GOALS = "@std/goals";
@@ -40,12 +40,12 @@ export async function saveGoals(goals: Goal[]): Promise<void> {
 }
 
 //DayRecord (per-date)
-export async function loadRecord(date: string): Promise<DayRecord | null> {
+export async function loadRecord(date: string): Promise<DailyRecord | null> {
   const raw = await AsyncStorage.getItem(recordKey(date));
-  return safeJsonParse<DayRecord>(raw);
+  return safeJsonParse<DailyRecord>(raw);
 }
 
-export async function saveRecord(date: string, record: DayRecord): Promise<void> {
+export async function saveRecord(date: string, record: DailyRecord): Promise<void> {
   await AsyncStorage.setItem(recordKey(date), JSON.stringify(record));
 }
 
@@ -64,7 +64,7 @@ export async function resetAll(): Promise<void> {
 export async function bootstrap(date: string): Promise<{
   activities: Activity[];
   goals: Goal[];
-  record: DayRecord;
+  record: DailyRecord;
 }> {
   //Activities
   let activities = await loadActivities();

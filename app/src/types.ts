@@ -31,6 +31,7 @@ export type PlannerTemplate = {
   cards: Array<{
     id: string;
     title: string;
+    totalSlot: number;
   }>;
 };
 

@@ -1,4 +1,4 @@
-import type { Activity, Block, DayRecord, Goal } from "../types";
+import type { Activity, DailyRecord, Goal, PlannerTemplate, TimeBlock } from "../types";
 
 export const seedActivities: Activity[] = [
   { id: "coding", name: "Coding", colorHex: "#5B8CFF", sortOrder: 1 },
@@ -17,18 +17,19 @@ export const seedGoals: Goal[] = [
   },
 ];
 
-export function createEmptyBlocks(): Block[] {
+export function createEmptyBlocks(totalSlot: number): TimeBlock[] {
   //48 blocks = 24h * 2(30min)
-  return Array.from({ length: 48 }, () => ({
+  return Array.from({ length: totalSlot }, () => ({
     activityId: null,
     isSkipped: false,
   }));
 }
 
-export function createEmptyDayRecord(date: string): DayRecord {
+export function createEmptyDayRecord(dateKey: string, totalSlot: number): DailyRecord&PlannerTemplate {
   return {
-    date,
-    blocks: createEmptyBlocks(),
+    dateKey,
+    blocks: createEmptyBlocks(totalSlot),
+    cards: []
   };
 }
 
