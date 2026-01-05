@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createEmptyDayRecord, seedActivities, seedGoals } from "../seed/seed";
-import type { Activity, DailyRecord, Goal } from "../types";
+import { createEmptyDayRecord, seedActivities, seedGoals, seedSettings } from "../seed/seed";
+import type { Activity, DailyRecord, Goal, Settings } from "../types";
+import { calcTotalSlots } from "../utils/slots";
 
 const KEY_ACTIVITIES = "@std/activities";
 const KEY_GOALS = "@std/goals";
 const KEY_RECORD_PREFIX = "@std/record:"; //@std/record:2025-12-29
+const KEY_SETTINGS = "@std/settings";
 
 function recordKey(date: string) {
   return `${KEY_RECORD_PREFIX}${date}`;
@@ -22,7 +24,8 @@ async function safeJsonParse<T>(raw: string | null): Promise<T | null> {
 //Activities
 export async function loadActivities(): Promise<Activity[] | null> {
   const raw = await AsyncStorage.getItem(KEY_ACTIVITIES);
-  return safeJsonParse<Activity[]>(raw);
+  const parsed = await safeJsonParse<Activity[]>(raw);
+  return parsed && parsed.length ? parsed : seedActivities;
 }
 
 export async function saveActivities(activities: Activity[]): Promise<void> {
@@ -32,11 +35,23 @@ export async function saveActivities(activities: Activity[]): Promise<void> {
 //Goals
 export async function loadGoals(): Promise<Goal[] | null> {
   const raw = await AsyncStorage.getItem(KEY_GOALS);
-  return safeJsonParse<Goal[]>(raw);
+  const parsed = await safeJsonParse<Goal[]>(raw);
+  return parsed && parsed.length ? parsed : seedGoals;
 }
 
 export async function saveGoals(goals: Goal[]): Promise<void> {
   await AsyncStorage.setItem(KEY_GOALS, JSON.stringify(goals));
+}
+
+//Settings
+export async function loadSettings(): Promise<Settings> {
+  const raw = await AsyncStorage.getItem(KEY_SETTINGS);
+  const parsed = await safeJsonParse<Settings>(raw);
+  return parsed ?? seedSettings;
+}
+
+export async function saveSettings(settings: Settings): Promise<void> {
+  await AsyncStorage.setItem(KEY_SETTINGS, JSON.stringify(settings))
 }
 
 //DayRecord (per-date)
@@ -53,7 +68,7 @@ export async function saveRecord(date: string, record: DailyRecord): Promise<voi
 export async function resetAll(): Promise<void> {
   const keys = await AsyncStorage.getAllKeys();
   const targets = keys.filter(
-    (k) => k === KEY_ACTIVITIES || k === KEY_GOALS || k.startsWith(KEY_RECORD_PREFIX)
+    (k) => k === KEY_ACTIVITIES || k === KEY_GOALS || k=== KEY_SETTINGS || k.startsWith(KEY_RECORD_PREFIX)
   );
   if (targets.length > 0) {
     await AsyncStorage.multiRemove(targets);
@@ -64,6 +79,7 @@ export async function resetAll(): Promise<void> {
 export async function bootstrap(date: string): Promise<{
   activities: Activity[];
   goals: Goal[];
+  settings: Settings;
   record: DailyRecord;
 }> {
   //Activities
@@ -81,11 +97,15 @@ export async function bootstrap(date: string): Promise<{
   }
 
   //Record
+  const settings = await loadSettings();
+  await saveSettings(settings);
+  const totalSlots = calcTotalSlots(settings);
+
   let record = await loadRecord(date);
   if (!record) {
-    record = createEmptyDayRecord(date);
+    record = createEmptyDayRecord(date, totalSlots);
     await saveRecord(date, record);
   }
 
-  return { activities, goals, record };
+  return { activities, goals, settings, record };
 }

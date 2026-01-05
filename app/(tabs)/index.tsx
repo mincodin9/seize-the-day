@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -6,48 +7,28 @@ import {
   SafeAreaView,
   Text,
   TextInput,
-  View,
+  View
 } from "react-native";
 
-import { seedActivities } from "@/app/src/seed/seed";
-import type { TaskCard } from "@/app/src/types";
+import { bootstrap } from "@/app/src/storage/storageRepo";
+import type { Activity, DailyRecord, Settings, TaskCard } from "@/app/src/types";
+import { calcTotalSlots, getTodayKey, slotLabel, timeToMinutes } from "@/app/src/utils/slots";
 import DraggableFlatList, {
   RenderItemParams,
 } from "react-native-draggable-flatlist";
 
 //Local types
-type Activity = { id: string; name: string; colorHex: string; sortOrder: number };
 type Cell = { activityId: string | null };
 type DragMode = "PAINT" | "ERASE";
 
 const SLOT_ROW_H = 20;
-
-//Time utils
-function timeToMinutes(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-function slotLabel(startMin: number, idx: number) {
-  const m = startMin + idx * 30;
-  const hh = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${pad2(hh)}:${pad2(mm)}`;
-}
+const TIME_COL_W = 54;
 
 export default function Index() {
   //Data
-  const activities = seedActivities;
-
-  //Settings(TODO: load from Settings screen)
-  const startTime = "08:00";
-  const endTime = "26:00";
-
-  const startMin = timeToMinutes(startTime);
-  const endMin = timeToMinutes(endTime);
-  const totalSlots = Math.max(0, Math.floor((endMin - startMin) / 30));
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [record, setRecord] = useState<DailyRecord | null>(null);
 
   //State
   const [selectedActivityId, setSelectedActivityId] = useState<string>(
@@ -61,9 +42,7 @@ export default function Index() {
   //Day-level skip lock(excluded from stats)
   const [daySkipped, setDaySkipped] = useState(false);
 
-  const [cells, setCells] = useState<Cell[]>(
-    () => Array.from({ length: totalSlots }, () => ({ activityId: null }))
-  );
+  const [cells, setCells] = useState<Cell[]>([]);
 
   const [cards, setCards] = useState<TaskCard[]>([
     {
@@ -94,9 +73,45 @@ export default function Index() {
   const paintingRef = useRef(false);
   const startIdxRef = useRef<number | null>(null);
   const baseCellsRef = useRef<Cell[] | null>(null);
+  const scrollYRef = useRef(0);
 
   //Refs for focusing next TextInput
   const inputRefs = useRef<Record<string, TextInput | null>>({});
+
+  //Settings
+  const hydrate = useCallback(async () => {
+    const todayKey = getTodayKey();
+    const data = await bootstrap(todayKey);
+
+    setActivities(data.activities);
+    setSettings(data.settings);
+    setRecord(data.record);
+    setSelectedActivityId((prev) => prev || data.activities[0]?.id || "");
+
+    const slots = calcTotalSlots(data.settings);
+    const loadedCells: Cell[] = (data.record as any).cells ?? [];
+    const fixed = Array.from({ length: slots }, (_, i) => loadedCells[i] ?? { activityId: null });
+    setCells(fixed);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      hydrate();
+    }, [hydrate])
+  );
+
+  const startMin = useMemo(() => {
+    if (!settings) return 0;
+    return timeToMinutes(settings.startTime);
+  }, [settings]);
+
+  const totalSlots = useMemo(() => {
+    if (!settings) return 0;
+    return calcTotalSlots(settings);
+  }, [settings]);
+
+  const startTime = settings?.startTime ?? "--:--";
+  const endTime = settings?.endTime ?? "--:--";
 
   //Derived
   const activityById = useMemo(() => {
@@ -215,7 +230,8 @@ export default function Index() {
   };
 
   const yToIdx = (y: number) => {
-    const idx = Math.floor(y / SLOT_ROW_H);
+    const yInContent = y + scrollYRef.current;
+    const idx = Math.floor(yInContent / SLOT_ROW_H);
     if (idx < 0) return 0;
     if (idx >= totalSlots) return totalSlots - 1;
     return idx;
@@ -249,7 +265,7 @@ export default function Index() {
 
   //Render helpers
   const renderSlot = ({ item: idx }: { item: number }) => {
-    const cell = cells[idx];
+    const cell = cells[idx] ?? { activityId: null };
     const activity = cell.activityId ? activityById.get(cell.activityId) : undefined;
 
     const bg = activity?.colorHex ?? "#EEF2F7";
@@ -441,6 +457,10 @@ export default function Index() {
               keyExtractor={(i) => String(i)}
               renderItem={renderSlot}
               contentContainerStyle={styles.timeline}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                scrollYRef.current = e.nativeEvent.contentOffset.y;
+              }}
             />
 
             <View
@@ -601,7 +621,7 @@ const styles = {
   paintOverlay: {
     position: "absolute",
     top: 0,
-    left: 0,
+    left: TIME_COL_W,
     right: 0,
     bottom: 0,
   },

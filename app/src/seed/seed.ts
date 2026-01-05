@@ -1,4 +1,4 @@
-import type { Activity, DailyRecord, Goal, PlannerTemplate, TimeBlock } from "../types";
+import type { Activity, DailyRecord, Goal, PlannerTemplate, Settings, TimeBlock } from "../types";
 
 export const seedActivities: Activity[] = [
   { id: "coding", name: "Coding", colorHex: "#5B8CFF", sortOrder: 1 },
@@ -6,6 +6,7 @@ export const seedActivities: Activity[] = [
   { id: "exercise", name: "Exercise", colorHex: "#FF8A5B", sortOrder: 3 },
   { id: "play", name: "Play", colorHex: "#B56BFF", sortOrder: 4 },
   { id: "sleep", name: "Sleep", colorHex: "#3A4A5F", sortOrder: 5 },
+  { id: "unknown", name: "Unknown", colorHex: "#9CA3AF", sortOrder: 0 },
 ];
 
 export const seedGoals: Goal[] = [
@@ -16,6 +17,13 @@ export const seedGoals: Goal[] = [
     isEnabled: true,
   },
 ];
+
+export const seedSettings: Settings = {
+  startTime: "08:00",
+  endTime: "24:00",
+  slotMinutes: 30,
+  appearance: "system",
+}
 
 export function createEmptyBlocks(totalSlot: number): TimeBlock[] {
   //48 blocks = 24h * 2(30min)
@@ -31,13 +39,4 @@ export function createEmptyDayRecord(dateKey: string, totalSlot: number): DailyR
     blocks: createEmptyBlocks(totalSlot),
     cards: []
   };
-}
-
-//Format today's date as YYYY-MM-DD
-export function getTodayKey(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
 }

@@ -1,11 +1,20 @@
 //Activities
 export type ActivityId = string;
+export type Appearance = "light" | "dark" | "system";
 
 export type Activity = {
   id: ActivityId;
   name: string;
   colorHex: string;
   sortOrder: number;
+};
+
+//Settings
+export type Settings = {
+  startTime: string;
+  endTime: string;
+  slotMinutes: number; //30
+  appearance: Appearance;
 };
 
 //Time Blocks(Timeline)

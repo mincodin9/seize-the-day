@@ -8,7 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 function SettingsButton() {
   return(
-    <Pressable onPress={()=> router.push("/settings")} style={{ paddingRight: 12 }}>
+    <Pressable onPress={()=> router.push("../settings")} style={{ paddingRight: 12 }}>
       <Text style={{ fontSize: 18 }}>⚙️</Text>
     </Pressable>
   )
