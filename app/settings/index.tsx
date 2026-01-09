@@ -56,9 +56,9 @@ export default function SettingsScreen() {
           <View style={{ gap: 8 }}>
             <Row label="Appearance" value={appearanceLabel} />
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <SmallBtn text="System" onPress={() => updateSettings({ appearance: "system" as any })} />
-              <SmallBtn text="Light" onPress={() => updateSettings({ appearance: "light" as any })} />
-              <SmallBtn text="Dark" onPress={() => updateSettings({ appearance: "dark" as any })} />
+              <SmallBtn text="System" onPress={() => updateSettings({ appearance: "system" })} />
+              <SmallBtn text="Light" onPress={() => updateSettings({ appearance: "light" })} />
+              <SmallBtn text="Dark" onPress={() => updateSettings({ appearance: "dark" })} />
             </View>
 
             {/* TODO: Connect with app theme logic */}

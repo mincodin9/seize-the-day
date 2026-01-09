@@ -10,12 +10,13 @@ import {
   View
 } from "react-native";
 
-import { bootstrap } from "@/app/src/storage/storageRepo";
+import { bootstrap, deleteRecord, saveRecord } from "@/app/src/storage/storageRepo";
 import type { Activity, DailyRecord, Settings, TaskCard } from "@/app/src/types";
 import { calcTotalSlots, getTodayKey, slotLabel, timeToMinutes } from "@/app/src/utils/slots";
 import DraggableFlatList, {
   RenderItemParams,
 } from "react-native-draggable-flatlist";
+import { createEmptyDayRecord } from "../src/seed/seed";
 
 //Local types
 type Cell = { activityId: string | null };
@@ -33,6 +34,42 @@ export default function Index() {
   //State
   const [selectedActivityId, setSelectedActivityId] = useState<string>(
     activities[0]?.id ?? ""
+  );
+
+  const todayKeyRef = useRef<string>(getTodayKey());
+  const cellsRef = useRef<Cell[]>([]);
+
+  //Save Record
+  const persistCells = useCallback(
+    async (nextCells: Cell[]) => {
+      if(!settings) return;
+
+      const slots = calcTotalSlots(settings);
+      const dateKey = todayKeyRef.current;
+
+      const hasData = nextCells.some((c) => !!c.activityId);
+      if (!hasData) {
+        await deleteRecord(dateKey);
+        const emptyCells = Array.from({ length: slots }, () => ({ activityId: null }));
+        setCells(emptyCells);
+        cellsRef.current = emptyCells;
+        setRecord(null);
+        return;
+      }
+
+      const base = record ?? createEmptyDayRecord(dateKey, slots);
+      
+      const nextRecord: DailyRecord = {
+        ...base,
+        ...(base as any),
+        blocks: nextCells as any,
+        cells: nextCells as any,
+      };
+
+      setRecord(nextRecord);
+      await saveRecord(dateKey, nextRecord);
+    },
+    [settings, record]
   );
 
   //One-body toggle: PAINT<->ERASE
@@ -65,6 +102,8 @@ export default function Index() {
     const snap = undoRef.current;
     if (!snap) return;
     setCells(snap);
+    cellsRef.current = snap;
+    persistCells(snap);
     undoRef.current = null;
     setCanUndo(false);
   };
@@ -81,6 +120,8 @@ export default function Index() {
   //Settings
   const hydrate = useCallback(async () => {
     const todayKey = getTodayKey();
+    todayKeyRef.current = todayKey;
+
     const data = await bootstrap(todayKey);
 
     setActivities(data.activities);
@@ -89,9 +130,14 @@ export default function Index() {
     setSelectedActivityId((prev) => prev || data.activities[0]?.id || "");
 
     const slots = calcTotalSlots(data.settings);
-    const loadedCells: Cell[] = (data.record as any).cells ?? [];
+    const loadedCells: Cell[] = 
+      (data.record as any).cells ??
+      (data.record as any).blocks ??
+      [];
+
     const fixed = Array.from({ length: slots }, (_, i) => loadedCells[i] ?? { activityId: null });
     setCells(fixed);
+    cellsRef.current = fixed;
   }, []);
 
   useFocusEffect(
@@ -216,15 +262,14 @@ export default function Index() {
 
       if (isErase) {
         next[idx] = { activityId: null };
-        return next;
+      } else {
+        if (!selectedActivityId) return prev;
+        next[idx] = {
+          activityId: cur.activityId === selectedActivityId ? null : selectedActivityId,
+        };
       }
-
-      if (!selectedActivityId) return prev;
-
-      //Paint mode: tap again on same activity=>erase(toggle)
-      next[idx] = {
-        activityId: cur.activityId === selectedActivityId ? null : selectedActivityId,
-      };
+      cellsRef.current = next;
+      persistCells(next);
       return next;
     });
   };
@@ -256,11 +301,15 @@ export default function Index() {
       }
     }
     setCells(next);
+    cellsRef.current = next;
   };
 
   const clearTimeline = () => {
     if (!daySkipped) saveUndoSnapshot(cells);
-    setCells(() => Array.from({ length: totalSlots }, () => ({ activityId: null })));
+    const next = Array.from({ length: totalSlots }, () => ({ activityId: null }));
+    setCells(next);
+    cellsRef.current = next;
+    persistCells(next);
   };
 
   //Render helpers
@@ -490,11 +539,13 @@ export default function Index() {
                 paintingRef.current = false;
                 startIdxRef.current = null;
                 baseCellsRef.current = null;
+                persistCells(cellsRef.current);
               }}
               onResponderTerminate={() => {
                 paintingRef.current = false;
                 startIdxRef.current = null;
                 baseCellsRef.current = null;
+                persistCells(cellsRef.current);
               }}
             />
 

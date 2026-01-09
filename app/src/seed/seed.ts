@@ -1,12 +1,12 @@
 import type { Activity, DailyRecord, Goal, PlannerTemplate, Settings, TimeBlock } from "../types";
 
 export const seedActivities: Activity[] = [
-  { id: "coding", name: "Coding", colorHex: "#5B8CFF", sortOrder: 1 },
-  { id: "study", name: "Study", colorHex: "#6BCB77", sortOrder: 2 },
-  { id: "exercise", name: "Exercise", colorHex: "#FF8A5B", sortOrder: 3 },
-  { id: "play", name: "Play", colorHex: "#B56BFF", sortOrder: 4 },
-  { id: "sleep", name: "Sleep", colorHex: "#3A4A5F", sortOrder: 5 },
-  { id: "unknown", name: "Unknown", colorHex: "#9CA3AF", sortOrder: 0 },
+  { id: "coding", name: "Coding", colorHex: "#8aa2dbff", sortOrder: 1 },
+  { id: "study", name: "Study", colorHex: "#a4ebaeff", sortOrder: 2 },
+  { id: "exercise", name: "Exercise", colorHex: "#f1ad68ff", sortOrder: 3 },
+  { id: "play", name: "Play", colorHex: "#e0b2f3ff", sortOrder: 4 },
+  { id: "sleep", name: "Sleep", colorHex: "#466b9cff", sortOrder: 5 },
+  { id: "unknown", name: "Unknown", colorHex: "#c5cad3ff", sortOrder: 0 },
 ];
 
 export const seedGoals: Goal[] = [

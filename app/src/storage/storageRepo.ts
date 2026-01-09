@@ -64,6 +64,10 @@ export async function saveRecord(date: string, record: DailyRecord): Promise<voi
   await AsyncStorage.setItem(recordKey(date), JSON.stringify(record));
 }
 
+export async function deleteRecord(date: string): Promise<void> {
+  await AsyncStorage.removeItem(recordKey(date));
+}
+
 //Debug/reset
 export async function resetAll(): Promise<void> {
   const keys = await AsyncStorage.getAllKeys();

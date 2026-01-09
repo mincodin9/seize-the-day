@@ -6,7 +6,7 @@ import { loadActivities, saveActivities } from "@/app/src/storage/storageRepo";
 import type { Activity } from "@/app/src/types";
 
 const COLOR_PRESETS = [
-  "#5B8CFF", "#6BCB77", "#FF8A5B", "#B56BFF", "#3A4A5F", "#F4C542", "#EF5DA8",
+  "#8aa2dbff", "#a4ebaeff", "#f1ad68ff", "#e0b2f3ff", "#466b9cff", "#e5d29eff", "#f6b9d8ff", "#b8bcc4ff"
 ];
 
 export default function ActivitiesScreen() {
