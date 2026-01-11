@@ -84,19 +84,19 @@ const styles = {
   tabText: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#6B7280", // gray-500
+    color: "#6B7280",
   },
 
   tabTextActive: {
     fontWeight: "700",
-    color: "#111827", // almost black
+    color: "#111827",
   },
 
   todayBtn: {
     paddingHorizontal: 14,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#E8F5E1", // 연한 그린
+    backgroundColor: "#E8F5E1",
     borderWidth: 1,
     borderColor: "#A8DF8E",
   },
