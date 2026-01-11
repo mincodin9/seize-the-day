@@ -72,7 +72,6 @@ export default function Report() {
 
   return (
     <ScrollView style={ui.screen} contentContainerStyle={{ paddingBottom : 24 }}>
-      <Text style={ui.title}>Report</Text>
       <Text style={ui.muted}>This week</Text>
 
       <View style={ui.stack}>
