@@ -3,5 +3,9 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "typescript.tsserver.exclude" : ["**/node_modules/**"],
+  "files.watcherExclude": {
+    "**/node_modules/**": true
   }
 }

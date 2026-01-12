@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { loadSettings, saveSettings } from "@/app/src/storage/storageRepo";
 import type { Settings } from "@/app/src/types";
+import { cancelDailyReminder, scheduleDailyReminder } from "../src/notifications/notificationService";
 
 export default function SettingsScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -27,6 +28,20 @@ export default function SettingsScreen() {
     if (!settings) return "-";
     return settings.appearance;
   }, [settings]);
+
+  const isDailyNotification = useMemo(() => {
+    return !!settings?.isDailyNotification;
+  }, [settings]);
+
+  const onToggleDailyNotification = async (next: boolean) => {
+    await updateSettings({ isDailyNotification: next });
+
+    if(next) {
+      await scheduleDailyReminder({ hour: 21, minute: 0 });
+    } else {
+      await cancelDailyReminder();
+    }
+  };
 
   return (
     <View style={{ flex: 1, padding: 16, gap: 12, backgroundColor: "#EFF3FA" }}>
@@ -62,6 +77,20 @@ export default function SettingsScreen() {
             </View>
 
             {/* TODO: Connect with app theme logic */}
+          </View>
+        )}
+      </Card>
+
+      <Card title="Reminders">
+        {!settings ? (
+          <Text>Loading...</Text>
+        ) : (
+          <View style={{ gap: 8 }}>
+            <Row label="Daily reminder" value={isDailyNotification ? "ON" : "OFF"} />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <SmallBtn text="ON" onPress={() => onToggleDailyNotification(true)} />
+              <SmallBtn text="OFF" onPress={() => onToggleDailyNotification(false)} />
+            </View>
           </View>
         )}
       </Card>
