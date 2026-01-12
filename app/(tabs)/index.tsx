@@ -7,23 +7,21 @@ import {
   SafeAreaView,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
 
 import { bootstrap, deleteRecord, saveRecord } from "@/app/src/storage/storageRepo";
-import type { Activity, DailyRecord, Settings, TaskCard } from "@/app/src/types";
+import type { Activity, DailyRecord, Settings, TaskCard, TimeBlock } from "@/app/src/types";
 import { calcTotalSlots, getTodayKey, slotLabel, timeToMinutes } from "@/app/src/utils/slots";
-import DraggableFlatList, {
-  RenderItemParams,
-} from "react-native-draggable-flatlist";
-import { createEmptyDayRecord } from "../src/seed/seed";
+import DraggableFlatList, { RenderItemParams } from "react-native-draggable-flatlist";
+import { createEmptyBlocks, createEmptyDayRecord } from "../src/seed/seed";
 
-//Local types
-type Cell = { activityId: string | null };
 type DragMode = "PAINT" | "ERASE";
 
 const SLOT_ROW_H = 20;
 const TIME_COL_W = 54;
+
+const emptyBlock = (): TimeBlock => ({ activityId: null, isSkipped: false });
 
 export default function Index() {
   //Data
@@ -31,46 +29,14 @@ export default function Index() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [record, setRecord] = useState<DailyRecord | null>(null);
 
-  //State
-  const [selectedActivityId, setSelectedActivityId] = useState<string>(
-    activities[0]?.id ?? ""
-  );
+  //Timeline UI state
+  const [cells, setCells] = useState<TimeBlock[]>([]);
+  const cellsRef = useRef<TimeBlock[]>([]);
+
+  //Selected activity
+  const [selectedActivityId, setSelectedActivityId] = useState<string>(activities[0]?.id ?? "");
 
   const todayKeyRef = useRef<string>(getTodayKey());
-  const cellsRef = useRef<Cell[]>([]);
-
-  //Save Record
-  const persistCells = useCallback(
-    async (nextCells: Cell[]) => {
-      if(!settings) return;
-
-      const slots = calcTotalSlots(settings);
-      const dateKey = todayKeyRef.current;
-
-      const hasData = nextCells.some((c) => !!c.activityId);
-      if (!hasData) {
-        await deleteRecord(dateKey);
-        const emptyCells = Array.from({ length: slots }, () => ({ activityId: null }));
-        setCells(emptyCells);
-        cellsRef.current = emptyCells;
-        setRecord(null);
-        return;
-      }
-
-      const base = record ?? createEmptyDayRecord(dateKey, slots);
-      
-      const nextRecord: DailyRecord = {
-        ...base,
-        ...(base as any),
-        blocks: nextCells as any,
-        cells: nextCells as any,
-      };
-
-      setRecord(nextRecord);
-      await saveRecord(dateKey, nextRecord);
-    },
-    [settings, record]
-  );
 
   //One-body toggle: PAINT<->ERASE
   const [mode, setMode] = useState<DragMode>("PAINT");
@@ -79,21 +45,14 @@ export default function Index() {
   //Day-level skip lock(excluded from stats)
   const [daySkipped, setDaySkipped] = useState(false);
 
-  const [cells, setCells] = useState<Cell[]>([]);
+  //Cards source = record.cards(no separate cards state)
+  const cards: TaskCard[] = record?.cards ?? [];
 
-  const [cards, setCards] = useState<TaskCard[]>([
-    {
-      id: Date.now().toString(),
-      title: "Today Tasks",
-      items: [{ id: Date.now().toString(), text: "", done: false }],
-    },
-  ]);
-
-  //Undo(1 step) - STATE for reliable rerender
-  const undoRef = useRef<Cell[] | null>(null);
+  //Undo(1 step)
+  const undoRef = useRef<TimeBlock[] | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
-  const saveUndoSnapshot = (snapshot: Cell[]) => {
+  const saveUndoSnapshot = (snapshot: TimeBlock[]) => {
     undoRef.current = snapshot;
     setCanUndo(true);
   };
@@ -111,13 +70,60 @@ export default function Index() {
   //Refs for timeline drag
   const paintingRef = useRef(false);
   const startIdxRef = useRef<number | null>(null);
-  const baseCellsRef = useRef<Cell[] | null>(null);
+  const baseCellsRef = useRef<TimeBlock[] | null>(null);
   const scrollYRef = useRef(0);
 
   //Refs for focusing next TextInput
   const inputRefs = useRef<Record<string, TextInput | null>>({});
 
-  //Settings
+  //Persist(blocks+cards only)
+  const persistRecord = useCallback(
+    async (patch: Partial<Pick<DailyRecord, "blocks" | "cards">>) => {
+      if (!settings) return;
+
+      const slots = calcTotalSlots(settings);
+      const dateKey = todayKeyRef.current;
+
+      const base = record ?? createEmptyDayRecord(dateKey, slots);
+
+      const nextRecord: DailyRecord = {
+        ...base,
+        ...patch,
+        blocks: patch.blocks ?? base.blocks,
+        cards: patch.cards ?? base.cards,
+      };
+
+      const hasBlockData = nextRecord.blocks.some((b) => !!b.activityId);
+      const hasCardData = nextRecord.cards.some((card) =>
+        (card.items ?? []).some((it) => (it.text?.trim?.() ?? "") !== "" || it.done)
+      );
+
+      if (!hasBlockData && !hasCardData) {
+        await deleteRecord(dateKey);
+
+        const emptyCells = Array.from({ length: slots }, emptyBlock);
+        setCells(emptyCells);
+        cellsRef.current = emptyCells;
+        setRecord(null);
+        return;
+      }
+
+      setRecord(nextRecord);
+      await saveRecord(dateKey, nextRecord);
+    },
+    [settings, record]
+  );
+
+  const persistCells = useCallback(
+    async (nextCells: TimeBlock[]) => {
+      setCells(nextCells);
+      cellsRef.current = nextCells;
+      await persistRecord({ blocks: nextCells });
+    },
+    [persistRecord]
+  );
+
+  //Hydrate
   const hydrate = useCallback(async () => {
     const todayKey = getTodayKey();
     todayKeyRef.current = todayKey;
@@ -126,16 +132,23 @@ export default function Index() {
 
     setActivities(data.activities);
     setSettings(data.settings);
-    setRecord(data.record);
     setSelectedActivityId((prev) => prev || data.activities[0]?.id || "");
 
     const slots = calcTotalSlots(data.settings);
-    const loadedCells: Cell[] = 
-      (data.record as any).cells ??
-      (data.record as any).blocks ??
-      [];
 
-    const fixed = Array.from({ length: slots }, (_, i) => loadedCells[i] ?? { activityId: null });
+    const baseRecord: DailyRecord =
+      data.record
+        ? {
+            ...data.record,
+            cards: (data.record.cards?.length ? data.record.cards : makeDefaultCards()),
+            blocks: (data.record.blocks?.length ? data.record.blocks : createEmptyBlocks(slots)),
+          }
+        : createEmptyDayRecord(todayKey, slots);
+
+    setRecord(baseRecord);
+
+    const loadedBlocks = baseRecord.blocks ?? [];
+    const fixed = Array.from({ length: slots }, (_, i) => loadedBlocks[i] ?? emptyBlock());
     setCells(fixed);
     cellsRef.current = fixed;
   }, []);
@@ -146,6 +159,7 @@ export default function Index() {
     }, [hydrate])
   );
 
+  //Derived
   const startMin = useMemo(() => {
     if (!settings) return 0;
     return timeToMinutes(settings.startTime);
@@ -159,30 +173,37 @@ export default function Index() {
   const startTime = settings?.startTime ?? "--:--";
   const endTime = settings?.endTime ?? "--:--";
 
-  //Derived
   const activityById = useMemo(() => {
     const m = new Map<string, Activity>();
     for (const a of activities) m.set(a.id, a);
     return m;
   }, [activities]);
 
-  //Cards/Checklist handlers
+  //Cards handlers
+  const makeDefaultCards = (): TaskCard[] => [
+    {
+      id: Date.now().toString(),
+      title: "Today Tasks",
+      items: [{ id: Date.now().toString(), text: "", done: false }],
+    },
+  ];
+
   const addTaskCard = () => {
-    setCards((prev) => [
-      ...prev,
+    const next = [
+      ...cards,
       {
         id: Date.now().toString(),
         title: "New Card",
         items: [{ id: Date.now().toString(), text: "", done: false }],
       },
-    ]);
+    ];
+    persistRecord({ cards: next });
   };
 
   const removeTaskCard = (cardId: string) => {
-    setCards((prev) => {
-      if (prev.length <= 1) return prev;
-      return prev.filter((c) => c.id !== cardId);
-    });
+    if (cards.length <= 1) return;
+    const next = cards.filter((c) => c.id !== cardId);
+    persistRecord({ cards: next });
   };
 
   const confirmRemoveCard = (cardId: string) => {
@@ -193,81 +214,79 @@ export default function Index() {
   };
 
   const updateCardTitle = (cardId: string, title: string) => {
-    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, title } : c)));
+    const next = cards.map((c) => (c.id === cardId ? { ...c, title } : c));
+    persistRecord({ cards: next });
   };
 
   const toggleItemDone = (cardId: string, itemId: string) => {
-    setCards((prev) =>
-      prev.map((c) =>
-        c.id === cardId
-          ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)) }
-          : c
-      )
+    const next = cards.map((c) =>
+      c.id === cardId
+        ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)) }
+        : c
     );
+    persistRecord({ cards: next });
   };
 
   const updateItemText = (cardId: string, itemId: string, text: string) => {
-    setCards((prev) =>
-      prev.map((c) =>
-        c.id === cardId
-          ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, text } : i)) }
-          : c
-      )
+    const next = cards.map((c) =>
+      c.id === cardId
+        ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, text } : i)) }
+        : c
     );
+    persistRecord({ cards: next });
   };
 
   const addItemAfter = (cardId: string, itemId: string) => {
     const newId = Date.now().toString();
 
-    setCards((prev) =>
-      prev.map((card) => {
-        if (card.id !== cardId) return card;
-        const idx = card.items.findIndex((i) => i.id === itemId);
-        if (idx === -1) return card;
+    const next = cards.map((card) => {
+      if (card.id !== cardId) return card;
+      const idx = card.items.findIndex((i) => i.id === itemId);
+      if (idx === -1) return card;
 
-        const items = [...card.items];
-        items.splice(idx + 1, 0, { id: newId, text: "", done: false });
-        return { ...card, items };
-      })
-    );
+      const items = [...card.items];
+      items.splice(idx + 1, 0, { id: newId, text: "", done: false });
+      return { ...card, items };
+    });
 
+    persistRecord({ cards: next });
     return newId;
   };
 
   const removeTaskItem = (cardId: string, itemId: string) => {
-    setCards((prev) =>
-      prev.map((c) => {
-        if (c.id !== cardId) return c;
+    const next = cards.map((c) => {
+      if (c.id !== cardId) return c;
 
-        if (c.items.length <= 1) return c;
-        const items = c.items.filter((i) => i.id !== itemId);
-        return {
-          ...c,
-          items: items.length ? items : [{ id: Date.now().toString(), text: "", done: false }],
-        };
-      })
-    );
+      if (c.items.length <= 1) return c;
+      const items = c.items.filter((i) => i.id !== itemId);
+
+      return {
+        ...c,
+        items: items.length ? items : [{ id: Date.now().toString(), text: "", done: false }],
+      };
+    });
+
+    persistRecord({ cards: next });
   };
 
   //Timeline handlers
   const onPressSlot = (idx: number) => {
-    //Skip lock: block all interactions
     if (daySkipped) return;
 
     setCells((prev) => {
       saveUndoSnapshot(prev);
 
       const next = [...prev];
-      const cur = next[idx];
+      const cur = next[idx] ?? emptyBlock();
 
       if (isErase) {
-        next[idx] = { activityId: null };
+        next[idx] = { ...cur, activityId: null, isSkipped: false };
       } else {
         if (!selectedActivityId) return prev;
-        next[idx] = {
-          activityId: cur.activityId === selectedActivityId ? null : selectedActivityId,
-        };
+        const nextId = cur.activityId === selectedActivityId ? null : selectedActivityId;
+        next[idx] = { ...cur, activityId: nextId, isSkipped: false };
       }
+
       cellsRef.current = next;
       persistCells(next);
       return next;
@@ -293,20 +312,22 @@ export default function Index() {
     const next = base.slice();
 
     for (let i = a; i <= b; i++) {
+      const cur = next[i] ?? emptyBlock();
       if (isErase) {
-        next[i] = { activityId: null };
+        next[i] = { ...cur, activityId: null, isSkipped: false };
       } else {
         if (!selectedActivityId) continue;
-        next[i] = { activityId: selectedActivityId };
+        next[i] = { ...cur, activityId: selectedActivityId, isSkipped: false };
       }
     }
+
     setCells(next);
     cellsRef.current = next;
   };
 
   const clearTimeline = () => {
     if (!daySkipped) saveUndoSnapshot(cells);
-    const next = Array.from({ length: totalSlots }, () => ({ activityId: null }));
+    const next = Array.from({ length: totalSlots }, emptyBlock);
     setCells(next);
     cellsRef.current = next;
     persistCells(next);
@@ -314,7 +335,7 @@ export default function Index() {
 
   //Render helpers
   const renderSlot = ({ item: idx }: { item: number }) => {
-    const cell = cells[idx] ?? { activityId: null };
+    const cell = cells[idx] ?? emptyBlock();
     const activity = cell.activityId ? activityById.get(cell.activityId) : undefined;
 
     const bg = activity?.colorHex ?? "#EEF2F7";
@@ -366,9 +387,8 @@ export default function Index() {
                 keyExtractor={(item) => item.id}
                 activationDistance={12}
                 onDragEnd={({ data }) => {
-                  setCards((prev) =>
-                    prev.map((c) => (c.id === card.id ? { ...c, items: data } : c))
-                  );
+                  const next = cards.map((c) => (c.id === card.id ? { ...c, items: data } : c));
+                  persistRecord({ cards: next });
                 }}
                 renderItem={({
                   item,
@@ -422,9 +442,7 @@ export default function Index() {
                 onPress={() => setDaySkipped((v) => !v)}
                 style={[styles.skipPill, daySkipped && styles.skipPillActive]}
               >
-                <Text style={[styles.skipText, daySkipped && styles.skipTextActive]}>
-                  Skip
-                </Text>
+                <Text style={[styles.skipText, daySkipped && styles.skipTextActive]}>Skip</Text>
               </Pressable>
             </View>
 
@@ -561,7 +579,6 @@ export default function Index() {
   );
 }
 
-//Styles
 const styles = {
   screen: { flex: 1, padding: 12, backgroundColor: "#EFF3FA" },
   twoCol: { flex: 1, flexDirection: "row", gap: 10 },

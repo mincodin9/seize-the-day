@@ -67,7 +67,7 @@ export function getMonthMatrix(
 //Sun-Sat or Mon-Sun
 export function getWeekKeys(
   selected: Date,
-  weekStartsOn: 0 | 1 = 1
+  weekStartsOn: 0 | 1 = 0
 ): DateKey[] {
   const dow = selected.getDay();
   const offset = (dow - weekStartsOn + 7) % 7;
