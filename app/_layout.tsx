@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import * as Notifications from "expo-notifications";
-import { Stack } from 'expo-router';
+import { Href, router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
@@ -18,12 +18,34 @@ LogBox.ignoreLogs([
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
+
+export function useNotificationDeepLink() {
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const last = await Notifications.getLastNotificationResponseAsync();
+      const href = last?.notification.request.content.data?.href;
+      if(mounted && typeof href === "string") router.push(href as Href);
+    })();
+
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      const href = res.notification.request.content.data?.href;
+      if (typeof href === "string") router.push(href as Href);
+    });
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
+}
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -34,7 +56,9 @@ export default function RootLayout() {
   const [settings, setSettings] = useState<Settings | null>(null);
 
   useEffect(() => {
-    ensureAndroidChannel();
+    (async () => {
+      await ensureAndroidChannel();
+    })();
   }, []);
 
   useEffect(() => {
@@ -54,9 +78,11 @@ export default function RootLayout() {
     return appearance;
   }, [settings?.appearance, colorScheme]);
 
+  useNotificationDeepLink();
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={resolvedScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen 

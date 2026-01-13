@@ -3,9 +3,10 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { ToggleRow } from "@/app/src/components/ToggleRow";
 import { loadSettings, saveSettings } from "@/app/src/storage/storageRepo";
 import type { Settings } from "@/app/src/types";
-import { cancelDailyReminder, scheduleDailyReminder } from "../src/notifications/notificationService";
+import { debugListScheduled, setReminder, testNotifySeconds } from "../src/notifications/notificationService";
 
 export default function SettingsScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -29,17 +30,22 @@ export default function SettingsScreen() {
     return settings.appearance;
   }, [settings]);
 
-  const isDailyNotification = useMemo(() => {
-    return !!settings?.isDailyNotification;
-  }, [settings]);
+  const isDailyNotification = useMemo(() => !!settings?.isDailyNotification, [settings]);
+  const isWeeklyReportNotification = useMemo(() => !!settings?.isWeeklyReportNotification, [settings]);
 
   const onToggleDailyNotification = async (next: boolean) => {
     await updateSettings({ isDailyNotification: next });
+    const res = await setReminder("daily", next, { hour: 21, minute: 0 });
+    if (!res.ok) {
+      await updateSettings({ isDailyNotification: false });
+    }
+  };
 
-    if(next) {
-      await scheduleDailyReminder({ hour: 21, minute: 0 });
-    } else {
-      await cancelDailyReminder();
+  const onToggleWeeklyReport = async (next: boolean) => {
+    await updateSettings({ isWeeklyReportNotification: next });
+    const res = await setReminder("weeklyReport", next);
+    if (!res.ok) {
+      await updateSettings({ isWeeklyReportNotification: false });
     }
   };
 
@@ -85,12 +91,35 @@ export default function SettingsScreen() {
         {!settings ? (
           <Text>Loading...</Text>
         ) : (
-          <View style={{ gap: 8 }}>
-            <Row label="Daily reminder" value={isDailyNotification ? "ON" : "OFF"} />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <SmallBtn text="ON" onPress={() => onToggleDailyNotification(true)} />
-              <SmallBtn text="OFF" onPress={() => onToggleDailyNotification(false)} />
-            </View>
+          <View>
+            <ToggleRow
+              label="Daily reminder"
+              value={isDailyNotification}
+              onChange={onToggleDailyNotification}
+            />
+            <ToggleRow
+              label="Weekly report"
+              subtitle="Every Saturday 19:00"
+              value={isWeeklyReportNotification}
+              onChange={onToggleWeeklyReport}
+            />
+
+            {__DEV__ && (
+              <View style={{ marginTop: 12, gap: 12 }}>
+                <SmallBtn
+                  text="Test in 5s" 
+                  onPress={() => {
+                    console.log("TEST BUTTON PRESSED");
+                    testNotifySeconds(5);
+                    debugListScheduled();
+                  }}
+                />
+                <SmallBtn
+                  text="Go report (Test)"
+                  onPress={() => router.push("/report" as any)} 
+                />
+              </View>
+            )}
           </View>
         )}
       </Card>

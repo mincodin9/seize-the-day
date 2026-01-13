@@ -16,6 +16,7 @@ export type Settings = {
   slotMinutes: number; //30
   appearance: Appearance;
   isDailyNotification: boolean;
+  isWeeklyReportNotification: boolean;
 };
 
 //Time Blocks(Timeline)

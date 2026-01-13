@@ -24,6 +24,7 @@ export const seedSettings: Settings = {
   slotMinutes: 30,
   appearance: "system",
   isDailyNotification: true,
+  isWeeklyReportNotification: true,
 }
 
 export function createEmptyBlocks(totalSlot: number): TimeBlock[] {
