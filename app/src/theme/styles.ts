@@ -5,7 +5,7 @@ export const ui = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   title: {
     fontSize: font.title,

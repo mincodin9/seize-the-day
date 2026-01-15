@@ -351,7 +351,7 @@ export default function Index() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.twoCol}>
+      <View style={[styles.twoCol]}>
         {/* LEFT: Cards+Paint */}
         <View style={styles.leftPane}>
           {cards.map((card, index) => (
@@ -580,7 +580,7 @@ export default function Index() {
 }
 
 const styles = {
-  screen: { flex: 1, padding: 12, backgroundColor: "#EFF3FA" },
+  screen: { flex: 1, padding: 16, backgroundColor: "#EFF3FA" },
   twoCol: { flex: 1, flexDirection: "row", gap: 10 },
   leftPane: { width: 280, gap: 10 },
   rightPane: { flex: 1 },

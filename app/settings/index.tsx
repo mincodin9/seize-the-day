@@ -61,10 +61,10 @@ export default function SettingsScreen() {
 
             {/* TODO: Put timepicker as dropdown */}
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <SmallBtn text="08:00" onPress={() => updateSettings({ startTime: "08:00" })} />
               <SmallBtn text="06:00" onPress={() => updateSettings({ startTime: "06:00" })} />
-              <SmallBtn text="26:00" onPress={() => updateSettings({ endTime: "26:00" })} />
+              <SmallBtn text="08:00" onPress={() => updateSettings({ startTime: "08:00" })} />
               <SmallBtn text="24:00" onPress={() => updateSettings({ endTime: "24:00" })} />
+              <SmallBtn text="26:00" onPress={() => updateSettings({ endTime: "26:00" })} />
             </View>
           </View>
         )}

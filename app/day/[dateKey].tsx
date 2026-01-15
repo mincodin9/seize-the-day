@@ -163,12 +163,8 @@ export default function DayDetail() {
           {record.dateKey}
         </Text>
 
-        <Text style={{ marginTop: 8, opacity: 0.7 }}>
-          {summary?.topText ?? "No record"}
-        </Text>
-
         {summary?.rows?.length ? (
-          <View style={{ marginTop: 12, gap: 6 }}>
+          <View style={{ gap: 6 }}>
             {summary.rows.map((r) => (
               <Text key={r.activityId}>
                 • {r.name}: {Math.round(r.minutes / 60 * 10) / 10}h
@@ -178,7 +174,7 @@ export default function DayDetail() {
         ) : null}
 
         {/* Today Tasks */}
-        <View style={{ marginTop: 14 }}>
+        <View style={{ marginTop: 6 }}>
           <Text style={{ fontSize: 16, fontWeight: "800" }}>Today Tasks</Text>
 
           {!taskSummary.hasAnyText ? (

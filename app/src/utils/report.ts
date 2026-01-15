@@ -16,6 +16,14 @@ export type ActivityReportItem = {
   minutes: number;
 };
 
+//Week Range
+export function formatWeekRange(start: Date, end: Date) {
+  const fmt = (d: Date) => 
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  return `${fmt(start)} - ${fmt(end)}`;
+}
+
 //Day/Week Summary
 export function summarizeDayRecord(
   record: DailyRecord,

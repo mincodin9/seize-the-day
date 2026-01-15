@@ -88,7 +88,7 @@ export function formatWeekTitle(d: Date) {
   const y = d.getFullYear();
   const m = d.getMonth() + 1;
   const w = weekOfMonthSundayStart(d);
-  return `${y} / ${pad2(m)} / ${w}주차`
+  return `${y} / ${pad2(m)} / week ${w}`
 }
 
 export function weekOfMonthSundayStart(date: Date) {
