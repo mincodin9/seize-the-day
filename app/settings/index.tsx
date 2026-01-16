@@ -133,7 +133,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         <Pressable onPress={() => router.push("/settings/goals")} style={btnStyle}>
-          <Text style={btnText}>Goals</Text>
+          <Text style={btnText}>Goal</Text>
         </Pressable>
       </Card>
     </View>

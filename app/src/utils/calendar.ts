@@ -1,3 +1,5 @@
+import { DailyRecord, Goal } from "../types";
+
 export type DateKey = `${number}-${string}-${string}`;
 export type MonthCell = { date: Date; dateKey: DateKey; inMonth: boolean };
 export type MonthMatrix = (MonthCell | null)[][];
@@ -109,4 +111,28 @@ export function isSameDate(a: Date, b: Date) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+//Daily goal achievement
+export function minutesForActivity(record: DailyRecord, activityId: string, slotMinutes: number) {
+  let slots = 0;
+  for (const b of record.blocks) {
+    if(b.activityId === activityId && !b.isSkipped) slots += 1;
+  }
+  return slots * slotMinutes;
+}
+
+export function goalProgressOfDay(
+  record: DailyRecord | null,
+  goal: Goal | null,
+  slotMinutes: number
+) {
+  if (!record || !goal || !goal.isEnabled || !goal.activityId) {
+    return { minutes: 0, target: 0, ratio: 0, achieved: false };
+  }
+  const minutes = minutesForActivity(record, goal.activityId, slotMinutes);
+  const target = goal.targetMinutesPerDay ?? 0;
+  const ratio = target > 0 ? Math.min(1, minutes / target) : 0;
+  const achieved = target > 0 && minutes >= target;
+  return { minutes, target, ratio, achieved };
 }

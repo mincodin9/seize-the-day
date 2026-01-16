@@ -1,10 +1,10 @@
-import { formatMonthTitle, fromDateKey, getMonthMatrix } from "@/app/src/utils/calendar";
+import { formatMonthTitle, fromDateKey, getMonthMatrix, goalProgressOfDay } from "@/app/src/utils/calendar";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { DateKey } from "@/app/src/utils/calendar";
-import { loadRecord } from "../storage/storageRepo";
-import { DailyRecord } from "../types";
+import { loadActivities, loadGoals, loadRecord, loadSettings } from "../storage/storageRepo";
+import { Activity, DailyRecord, Goal, Settings } from "../types";
 
 type Props = {
   selectedDateKey: DateKey;
@@ -15,7 +15,29 @@ export default function MonthView({ selectedDateKey, onSelectDate }: Props) {
   const [cursorMonth, setCursorMonth] = useState(() => new Date()); //As of today
   const [recordByKey, setRecordByKey] = useState<Record<string, DailyRecord | null>>({});
 
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [goal, setGoal] = useState<Goal | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+
   const matrix = useMemo(() => getMonthMatrix(cursorMonth, 0), [cursorMonth]); //0-sun start
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const a = (await loadActivities()) ?? [];
+      const g = (await loadGoals()) ?? [];
+      const s = await loadSettings();
+
+      if (cancelled) return;
+
+      setActivities(a);
+      setGoal(g[0] ?? null);
+      setSettings(s);
+    })();
+
+    return () => { cancelled = true; };
+  })
 
   useEffect(() => {
     setCursorMonth(fromDateKey(selectedDateKey));
@@ -86,6 +108,10 @@ export default function MonthView({ selectedDateKey, onSelectDate }: Props) {
               const isSelected = cell.dateKey === selectedDateKey;
               const rec = cell ? recordByKey[cell.dateKey] : null;
               const hasData = !!(rec && hasAnyActivity(rec));
+              const goalAct = activities.find(a => a.id === goal?.activityId);
+              const gp = settings ? goalProgressOfDay(rec, goal, settings.slotMinutes) : null;
+              const achieved = !!gp?.achieved;
+
               return (
                 <Pressable
                   key={c}
@@ -107,6 +133,24 @@ export default function MonthView({ selectedDateKey, onSelectDate }: Props) {
                     <Text style={{ fontSize: 20, color: "#FD8A6B" }}>
                       {hasData ? "•" : ""}
                     </Text>
+
+                    {achieved && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          right: 6,
+                          bottom: 6,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          backgroundColor: goalAct?.colorHex ?? "#111",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: "900", color: "#fff" }}>✓</Text>
+                      </View>
+                    )}
                 </Pressable>
               )
             })}

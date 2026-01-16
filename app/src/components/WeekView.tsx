@@ -1,8 +1,8 @@
-import { addDays, formatWeekTitle, fromDateKey, getWeekKeys, type DateKey } from "@/app/src/utils/calendar";
+import { addDays, formatWeekTitle, fromDateKey, getWeekKeys, goalProgressOfDay, type DateKey } from "@/app/src/utils/calendar";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { loadActivities, loadRecord, loadSettings } from "../storage/storageRepo";
-import { Activity, DailyRecord, Settings } from "../types";
+import { loadActivities, loadGoals, loadRecord, loadSettings } from "../storage/storageRepo";
+import { Activity, DailyRecord, Goal, Settings } from "../types";
 import { summarizeRecord } from "../utils/summarize";
 import Card from "./Card";
 
@@ -18,6 +18,7 @@ export default function WeekView({ selectedDateKey, onSelectDate }: Props) {
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [goal, setGoal] = useState<Goal | null>(null);
 
   useEffect(() => {
     setCursorWeek(fromDateKey(selectedDateKey));
@@ -29,11 +30,12 @@ export default function WeekView({ selectedDateKey, onSelectDate }: Props) {
     let cancelled = false;
 
     (async () => {
-      const [a, s] = await Promise.all([loadActivities(), loadSettings()]);
+      const [a, s, g] = await Promise.all([loadActivities(), loadSettings(), loadGoals()]);
       if(cancelled) return;
 
       setActivities(a ?? []);
       setSettings(s);
+      setGoal((g ?? [])[0] ?? null);
 
       const map: Record<string, DailyRecord | null> = {};
       for (const k of weekKeys) {
@@ -69,6 +71,14 @@ export default function WeekView({ selectedDateKey, onSelectDate }: Props) {
           const summary =
             rec && settings ?
             summarizeRecord(rec, activities, settings.slotMinutes) : null;
+          
+          const goalAct = activities.find(a => a.id === goal?.activityId);
+          const prog = settings ? goalProgressOfDay(rec, goal, settings.slotMinutes) : null;
+          
+          const ratio = prog?.ratio ?? 0;
+          const achieved = !!prog?.achieved;
+          const mins = prog?.minutes ?? 0;
+          const target = prog?.target ?? 0;
 
           return (
             <Pressable key={k} onPress={() => onSelectDate(k)}>
@@ -76,6 +86,35 @@ export default function WeekView({ selectedDateKey, onSelectDate }: Props) {
                 <Text style={{ opacity: 0.7 }}>
                   {summary ? summary.topText : "No record"}
                 </Text>
+                {target >= 0 && (
+                  <View style={{ marginTop: 10, gap: 6 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ opacity: 0.7 }}>
+                        Goal: {Math.floor(mins / 60)}h {mins % 60}m / {Math.floor(target / 60)}h {target % 60}m
+                      </Text>
+                      <Text style={{ opacity: 0.7, fontWeight: achieved ? "800" : "600" }}>
+                        {Math.round(ratio * 100)}%
+                      </Text>
+                    </View>
+
+                    <View
+                      style={{
+                        height: 8,
+                        borderRadius: 999,
+                        backgroundColor: "#E5E7EB",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: `${Math.round(ratio * 100)}%`,
+                          height: "100%",
+                          backgroundColor: goalAct?.colorHex ?? "#111",
+                        }}
+                      />
+                    </View>
+                  </View>
+                )}
                 <Text style={{ marginTop: 6, fontWeight: isSelected ? "700" : "400" }}>
                   {isSelected ? "Selected" : ""}
                 </Text>

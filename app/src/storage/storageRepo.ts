@@ -35,8 +35,7 @@ export async function saveActivities(activities: Activity[]): Promise<void> {
 //Goals
 export async function loadGoals(): Promise<Goal[] | null> {
   const raw = await AsyncStorage.getItem(KEY_GOALS);
-  const parsed = await safeJsonParse<Goal[]>(raw);
-  return parsed && parsed.length ? parsed : seedGoals;
+  return safeJsonParse<Goal[]>(raw);
 }
 
 export async function saveGoals(goals: Goal[]): Promise<void> {
